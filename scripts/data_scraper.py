@@ -39,3 +39,17 @@ def get_all_financial_data(tickers):
 
     df_final = pd.concat(company_data)
     return df_final
+
+def scrape_esg(tickers):
+    company_data = []  # list to store each company's data as their own df
+    
+    for ticker_str in tickers:
+        ticker = yf.Ticker(ticker_str)
+
+        df_temp = ticker.sustainability.T
+        df_temp['Ticker'] = ticker_str
+
+        company_data.append(df_temp)
+
+    df_final = pd.concat(company_data)
+    return df_final
