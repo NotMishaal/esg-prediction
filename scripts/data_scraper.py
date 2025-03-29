@@ -41,6 +41,23 @@ def get_all_financial_data(tickers):
     return df_final
 
 def scrape_esg(tickers):
+    """
+    This function takes a list of ticker strings and returns a dataframe
+    that contains the Environmental, Social, and Governance (ESG) data for
+    all of the companies in the list. The data is queried from Yahoo Finance
+    and then merged into a single dataframe.
+
+    Parameters
+    ----------
+    tickers : list
+        A list of ticker strings
+
+    Returns
+    -------
+    df : pandas dataframe
+        A dataframe containing the ESG data for all of the companies in
+        the list
+    """
     company_data = []  # list to store each company's data as their own df
     
     for ticker_str in tickers:
