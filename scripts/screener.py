@@ -1,7 +1,6 @@
 import pandas as pd
 import yfinance as yf
 from yfinance import EquityQuery
-import numpy as np
 
 
 def validate_region_codes(codes):
@@ -119,7 +118,8 @@ def filter_screened_stocks(screened_stocks, n_keep=50):
         pd.DataFrame: The filtered DataFrame with the top n_keep stocks from each company size
     """
 
-    filtered = screened_stocks.loc[~screened_stocks['displayName'].isna()].sort_values('marketCap', ascending=False)
+    screened_stocks.drop_duplicates(subset=['longName'], keep='first', inplace=True)
+    filtered = screened_stocks.sort_values('marketCap', ascending=False)
     filtered.dropna(inplace=True, subset=['marketCap'])
 
     # calculate cumulative market cap
@@ -129,4 +129,24 @@ def filter_screened_stocks(screened_stocks, n_keep=50):
     # assign company size
     filtered['companySize'] = filtered['cumulativeMarketCapPercentage'].apply(assign_cap_category)
 
-    return filtered.groupby('companySize').head(n_keep)
+    # filtered = filtered.groupby('companySize').head(n_keep)  # filters the top n_keep stocks from each company size
+    return filtered
+
+def get_region_stocks(region_codes, n_keep=50, batch_size=250):
+    """
+    Fetches a list of stocks from the specified regions, filters them to keep the top n_keep stocks from each relative company size, and returns the filtered DataFrame
+
+    Parameters:
+        region_codes (list): List of Yahoo Finance region codes to filter by
+        n_keep (int): Number of stocks to keep from each company size
+        batch_size (int): Number of stocks to fetch per batch (max is 250)
+
+    Returns:
+        pd.DataFrame: The filtered DataFrame with the top n_keep stocks from each company size
+    """
+    region_codes = validate_region_codes(region_codes)
+
+    screened_stocks = fetch_screened_stocks(region_codes, batch_size)
+    screened_stocks = merge_screened_stocks(screened_stocks)
+
+    return filter_screened_stocks(screened_stocks, n_keep)
