@@ -73,6 +73,57 @@ def fetch_screened_stocks(region_codes, batch_size=250):
 
     return all_results
 
+def fetch_screened_esg_stocks(region_codes, batch_size=250):
+    """
+    Fetches a list of all the stocks in the specified regions
+
+    Parameters:
+        region_codes (list): list of region to filter by
+        batch_size (int): number of stocks to fetch per batch (max is 250)
+    """
+
+    offset = 0
+    all_results = []
+    prev_start = -1
+
+    region_query = EquityQuery('and', [
+        EquityQuery('is-in', region_codes),
+        EquityQuery('gte', ['esg_score', 0])
+    ])
+
+    while True:
+        # fetch a batch of results
+        screened_stocks = yf.screen(region_query, size=batch_size, offset=offset, sortField="intradaymarketcap")
+        
+        # break the loop if no more results are returned
+        if screened_stocks['count'] == 0:
+            print("No more results to fetch.")
+            break
+
+        if screened_stocks['start'] == prev_start:
+            # update the query if no new results are returned
+            prev_cap = screened_stocks['quotes'][-1]['marketCap'] # get the smallest market cap from the last results
+
+            region_query = EquityQuery('and', [
+                EquityQuery('is-in', region_codes),
+                EquityQuery('lte', ['intradaymarketcap', prev_cap]),
+                EquityQuery('gte', ['esg_score', 0])
+            ])
+            
+            offset = 0
+            print(f"Repetition detected at {prev_start}\nResetting with new query at market cap {prev_cap}")
+            continue
+
+        prev_start = screened_stocks['start']
+        
+        # append the current batch to the all_results list
+        all_results.append(screened_stocks)
+        
+        print(f"Batch {offset // batch_size + 1} complete.")
+        # increment the offset by the batch size for the next iteration
+        offset += batch_size
+
+    return all_results
 def merge_screened_stocks(screening_results):
     """
     Merge the list of screening results into a single DataFrame
@@ -132,7 +183,7 @@ def filter_screened_stocks(screened_stocks, n_keep=50):
     # filtered = filtered.groupby('companySize').head(n_keep)  # filters the top n_keep stocks from each company size
     return filtered
 
-def get_region_stocks(region_codes, n_keep=50, batch_size=250):
+def get_region_stocks(region_codes, n_keep=50, batch_size=250, esg_available=False):
     """
     Fetches a list of stocks from the specified regions, filters them to keep the top n_keep stocks from each relative company size, and returns the filtered DataFrame
 
@@ -146,7 +197,11 @@ def get_region_stocks(region_codes, n_keep=50, batch_size=250):
     """
     region_codes = validate_region_codes(region_codes)
 
-    screened_stocks = fetch_screened_stocks(region_codes, batch_size)
+    if esg_available:
+        screened_stocks = fetch_screened_esg_stocks(region_codes, batch_size)
+    else:
+        screened_stocks = fetch_screened_stocks(region_codes, batch_size)
+
     screened_stocks = merge_screened_stocks(screened_stocks)
 
     return filter_screened_stocks(screened_stocks, n_keep)
