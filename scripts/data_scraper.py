@@ -33,7 +33,7 @@ def get_all_financial_data(tickers):
         df_temp = df_temp.merge(cash_flow, on='index')
 
         df_temp['Ticker'] = ticker_str
-        df_temp.rename(columns={'index': 'Date'})
+        df_temp.rename(columns={'index': 'Date'}, inplace=True)
 
         company_data.append(df_temp)
 
