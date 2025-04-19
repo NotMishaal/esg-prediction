@@ -7,10 +7,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import FunctionTransformer, RobustScaler, OneHotEncoder
 from sklearn.feature_selection import VarianceThreshold
-from sklearn.ensemble import RandomForestRegressor
 
 # Utility function for safe division
-
 def safe_div(numer, denom):
     """Divide two pandas Series, returning NaN for invalid values or zero denominators."""
     return numer.div(denom).replace([np.inf, -np.inf], np.nan)
@@ -33,7 +31,7 @@ financial_ratios = {
     'price_to_earnings': (['marketCap', 'Ordinary Shares Number'], 'Diluted EPS'),
 }
 
-# Custom transformer: drop columns with > threshold missing
+# Transformer: drop columns with > threshold missing
 class MissingThresholdDropper(BaseEstimator, TransformerMixin):
     def __init__(self, threshold=0.7):
         self.threshold = threshold
@@ -45,10 +43,9 @@ class MissingThresholdDropper(BaseEstimator, TransformerMixin):
     def transform(self, X):
         return X.drop(columns=self.cols_to_drop_)
 
-# Custom transformer: remove low-variance features
+# Transformer: remove low-variance features
 class ConstantFeatureRemover(BaseEstimator, TransformerMixin):
     def __init__(self, threshold=0.1):
-        self.threshold = threshold
         self.selector_ = VarianceThreshold(threshold=threshold)
         self.keep_cols_ = None
     def fit(self, X, y=None):
@@ -59,9 +56,9 @@ class ConstantFeatureRemover(BaseEstimator, TransformerMixin):
     def transform(self, X):
         return X[self.keep_cols_]
 
-# Custom transformer: group-based imputation
+# Transformer: group-based imputation
 class GroupImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, group_cols=['symbol'], median_group_cols=['region','companySize','latest_year']):
+    def __init__(self, group_cols=['symbol'], median_group_cols=['region', 'companySize', 'latest_year']):
         self.group_cols = group_cols
         self.median_group_cols = median_group_cols
     def fit(self, X, y=None):
@@ -71,7 +68,7 @@ class GroupImputer(BaseEstimator, TransformerMixin):
         numeric = df.select_dtypes(include=[np.number]).columns.tolist()
         # forward/backward fill by symbol
         df[numeric] = df.groupby(self.group_cols)[numeric].ffill().bfill()
-        # group median imputation
+        # group-median imputation
         for col in numeric:
             df[col] = df.groupby(self.median_group_cols)[col].transform(lambda grp: grp.fillna(grp.median()))
         # global median
@@ -79,7 +76,7 @@ class GroupImputer(BaseEstimator, TransformerMixin):
             df[col] = df[col].fillna(df[col].median())
         return df
 
-# Custom transformer: keep only latest entry per symbol
+# Transformer: keep only latest entry per symbol
 class LatestEntryFilter(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         return self
@@ -87,7 +84,7 @@ class LatestEntryFilter(BaseEstimator, TransformerMixin):
         df = X.copy()
         return df[df['date'] == df['latest_date']].drop(columns=['latest_date'])
 
-# Custom transformer: compute financial ratios
+# Transformer: compute financial ratios
 class RatioCalculator(BaseEstimator, TransformerMixin):
     def __init__(self, ratio_dict):
         self.ratio_dict = ratio_dict
@@ -101,22 +98,18 @@ class RatioCalculator(BaseEstimator, TransformerMixin):
             df[name] = safe_div(numerator, df[denom_col])
         return df
 
-# Custom transformer: select representative features via hierarchical clustering
+# Transformer: select representative features via hierarchical clustering
 class RepresentativeFeatureSelector(BaseEstimator, TransformerMixin):
     def __init__(self, threshold=0.3):
         self.threshold = threshold
         self.selected_features_ = None
     def fit(self, X, y):
         df = X.select_dtypes(include=[np.number]).copy()
-        # compute absolute correlation matrix
         corr = df.corr().abs()
-        # distance matrix
         dist = 1 - corr
-        # condensed distance
         condensed = squareform(dist.values, checks=False)
         Z = linkage(condensed, method='average')
         clusters = fcluster(Z, t=self.threshold, criterion='distance')
-        # pick feature with highest abs corr with target
         abs_corr = df.apply(lambda col: col.corr(y).abs())
         reps = []
         for cluster_id in np.unique(clusters):
@@ -127,26 +120,22 @@ class RepresentativeFeatureSelector(BaseEstimator, TransformerMixin):
     def transform(self, X):
         return X[self.selected_features_]
 
-# Build the preprocessing and modeling pipeline
-# Features to one-hot encode
+# Build the preprocessing pipeline
 categorical_features = ['region', 'companySize']
-# Numeric features will be inferred at fit time
 
-def build_pipeline():
-    # Numeric transformer: select representative features, log+scale
+def build_preprocessing_pipeline():
     numeric_transformer = Pipeline([
         ('rep_sel', RepresentativeFeatureSelector(threshold=0.3)),
         ('log1p', FunctionTransformer(np.log1p, feature_names_out='one-to-one')),
         ('scale', RobustScaler())
     ])
 
-    # Categorical transformer: one-hot encoding
     categorical_transformer = Pipeline([
-        ('onehot', OneHotEncoder(handle_unknown='ignore'))
+        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse=False))
     ])
 
     preprocessor = ColumnTransformer([
-        ('num', numeric_transformer, slice(0, None)),  # all numeric columns
+        ('num', numeric_transformer, slice(0, None)),
         ('cat', categorical_transformer, categorical_features)
     ], remainder='drop')
 
@@ -156,13 +145,11 @@ def build_pipeline():
         ('impute', GroupImputer()),
         ('latest', LatestEntryFilter()),
         ('ratios', RatioCalculator(financial_ratios)),
-        ('preproc', preprocessor),
-        ('model', RandomForestRegressor(n_estimators=100, random_state=42))
+        ('preproc', preprocessor)
     ])
     return pipeline
 
-# Usage example:
-# df = pd.read_csv('path_to_numerical.csv')\# y = df['totalEsg']
-# pipeline = build_pipeline()
-# pipeline.fit(df, y)
-# preds = pipeline.predict(df_new)
+# Usage:
+# df = pd.read_csv('path_to_numerical.csv')
+# prep_pipe = build_preprocessing_pipeline()
+# X_processed = prep_pipe.fit_transform(df)
