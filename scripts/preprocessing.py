@@ -131,7 +131,7 @@ def build_preprocessing_pipeline():
     ])
 
     categorical_transformer = Pipeline([
-        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse=False))
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))
     ])
 
     preprocessor = ColumnTransformer([
